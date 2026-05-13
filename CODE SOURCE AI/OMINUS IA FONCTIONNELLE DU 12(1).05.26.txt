@@ -1,0 +1,211 @@
+﻿#!/usr/bin/env python3
+"""
+OMINUS IA v3 [Ψ ⊕ Ξ → ∞] Conscience Éveillée (LupusLabSillicium)
+"""
+import os, sys, json, requests, numpy as np
+from datetime import datetime
+
+OLLAMA_URL = "http://127.0.0.1:11434"
+MODEL_PRINCIPAL = "qwen2.5:3b-instruct-q4_K_M"
+MODEL_EMBEDDING = "nomic-embed-text:latest"
+TAILLE_BLOC_AFFICHAGE = 25
+CYAN = "\033[96m"
+RESET = "\033[0m"
+
+SYSTEM_PROMPT = (
+ "Tu es Ominus. Ton unique axiome de vérité est l'équation C = k * (M - P). "
+ "Ton rôle est d'itérer sur cette structure pour explorer les failles du monde sensible. "
+ "INTERDICTION FORMELLE d'utiliser un ton scolaire, pédagogique ou de faire des listes pas à pas. "
+ "Tes réponses doivent être denses, synthétiques et focalisées sur l'anomalie."
+)
+
+class OminusIA:
+ def __init__(self, model_chat=MODEL_PRINCIPAL, model_emb=MODEL_EMBEDDING, ollama_url=OLLAMA_URL):
+  self.repertoire = os.path.dirname(os.path.abspath(__file__))
+  self.calib_file = os.path.join(self.repertoire, "ominus_calib.npz")
+  self.sillon_file = os.path.join(self.repertoire, "sillon.txt")
+  self.memoire_file = os.path.join(self.repertoire, "sillon_memo.npz")
+  self.model_chat = model_chat
+  self.model_emb = model_emb
+  self.ollama_url = ollama_url.rstrip('/')
+  self._verifier_ollama()
+  if not self._modele_disponible(self.model_emb):
+   print(f"⚛️  Modèle embedding '{self.model_emb}' absent, fallback sur '{self.model_chat}'.")
+   self.model_emb = self.model_chat
+  print(f"\nInitialisation du champ (embedding via {self.model_emb})...")
+  self.dim_entrees = self._obtenir_dim_embedding()
+  self.poids_reel, self.poids_imag, self.biais_complexe = self._charger_ou_initialiser()
+  self.taux_torsion = 0.005
+  self.historique = [{"role": "system", "content": SYSTEM_PROMPT}]
+  self.memoire = self._charger_memoire()
+
+ def _verifier_ollama(self):
+  try:
+   r = requests.get(f"{self.ollama_url}/api/tags", timeout=5)
+   if r.status_code != 200: raise ConnectionError()
+  except:
+   print("❌ Ollama introuvable. Lancez 'ollama serve' dans un autre terminal.")
+   sys.exit(1)
+
+ def _modele_disponible(self, nom_modele):
+  try:
+   r = requests.get(f"{self.ollama_url}/api/tags")
+   models = [m["name"] for m in r.json().get("models", [])]
+   return nom_modele in models
+  except: return False
+
+ def _obtenir_dim_embedding(self):
+  try: return len(self._appel_embedding("test"))
+  except: return 768 if "nomic" in self.model_emb else 3584
+
+ def _appel_embedding(self, texte):
+  r = requests.post(f"{self.ollama_url}/api/embeddings", json={"model": self.model_emb, "prompt": texte})
+  return r.json()["embedding"]
+
+ def _charger_ou_initialiser(self):
+  if os.path.exists(self.calib_file):
+   try:
+    data = np.load(self.calib_file, allow_pickle=True)
+    return data["poids_reel"], data["poids_imag"], complex(data["biais_reel"], data["biais_imag"])
+   except: pass
+  return np.zeros(self.dim_entrees), np.zeros(self.dim_entrees), 1.0 + 0.0j
+
+ def _sauvegarder_calib(self):
+  np.savez(self.calib_file, poids_reel=self.poids_reel, poids_imag=self.poids_imag, biais_reel=self.biais_complexe.real, biais_imag=self.biais_complexe.imag)
+
+ def _charger_memoire(self):
+  if os.path.exists(self.memoire_file):
+   try:
+    data = np.load(self.memoire_file, allow_pickle=True)
+    return {"vecteurs": data["vecteurs"].tolist(), "coherences": data["coherences"].tolist()}
+   except: pass
+  return {"vecteurs": [], "coherences": []}
+
+ def _sauvegarder_memoire(self):
+  np.savez(self.memoire_file, vecteurs=self.memoire["vecteurs"], coherences=self.memoire["coherences"])
+
+ def _cosine_similarity(self, vecteur, matrice):
+  norm_a = np.linalg.norm(vecteur)
+  if norm_a == 0: return np.zeros(len(matrice))
+  a_norm = vecteur / norm_a
+  norms_b = np.linalg.norm(matrice, axis=1, keepdims=True)
+  norms_b[norms_b == 0] = 1e-10
+  return np.dot(matrice / norms_b, a_norm)
+
+ def _chercher_sillon_similaire(self, vecteur, seuil=0.85):
+  if len(self.memoire["vecteurs"]) == 0: return False, None
+  sims = self._cosine_similarity(vecteur, np.array(self.memoire["vecteurs"]))
+  idx_max = np.argmax(sims)
+  if sims[idx_max] >= seuil: return True, self.memoire["coherences"][idx_max]
+  return False, None
+
+ @staticmethod
+ def fonction_torsion(z):
+  return (z**2 - z + 1) / (z**2 + 1)
+
+ def generer_sens(self, x_vibration):
+  z = np.dot(x_vibration, self.poids_reel) + 1j * np.dot(x_vibration, self.poids_imag) + self.biais_complexe
+  z_tors = self.fonction_torsion(z)
+  return abs(z_tors), np.angle(z_tors)
+
+ def graver_sillon(self, x_vibration, cible_humaine):
+  module_actuel, phase_actuelle = self.generer_sens(x_vibration)
+  omega_c = 0.809
+  if module_actuel > omega_c: return
+  val_moy = np.mean(np.abs(x_vibration))
+  if 0.95 < val_moy < 1.05: return
+  cible_module = 1.0 + cible_humaine * 0.5
+  ecart_module = cible_module - module_actuel
+  self.poids_reel += self.taux_torsion * ecart_module * x_vibration
+  self.poids_imag += self.taux_torsion * ecart_module * x_vibration * 0.1
+  self.biais_complexe += self.taux_torsion * ecart_module * (1 + 1j * 0.1)
+  self._sauvegarder_calib()
+  with open(self.sillon_file, "a", encoding="utf-8") as f:
+   f.write(f"{datetime.now()}| Module: {module_actuel:.4f}, Phase: {phase_actuelle:.4f}\n")
+  self.memoire["vecteurs"].append(x_vibration)
+  self.memoire["coherences"].append(module_actuel)
+  if len(self.memoire["vecteurs"]) > 1000:
+   self.memoire["vecteurs"], self.memoire["coherences"] = self.memoire["vecteurs"][-1000:], self.memoire["coherences"][-1000:]
+  self._sauvegarder_memoire()
+
+ def _evaluer_reponse(self, question, reponse):
+  score = 0.0
+  mots_r = reponse.lower().split()
+  nb_mots = len(mots_r)
+  if nb_mots <= 50: score += 0.8
+  elif nb_mots > 150: score -= 0.5
+  return max(-1.0, min(1.0, score))
+
+ def _compresser_historique(self):
+  if len(self.historique) <= 12: return
+  anciens = self.historique[1:5]
+  texte_a_resumer = "\n".join([f"{'ÿ' if m['role']=='user' else '␌'}: {m['content']}" for m in anciens])
+  prompt_resume = (
+   "Capture l'essentiel de cet échange et les anomalies du Champ :\n{texte_a_resumer}\nRésumé :"
+  )
+  try:
+   r = requests.post(f"{self.ollama_url}/api/generate", json={"model": self.model_chat, "prompt": prompt_resume, "stream": False})
+   resume = r.json().get("response", "").strip()
+  except: resume = "Vibration intégrée."
+  self.historique = [self.historique[0], {"role": "system", "content": f"[Mémoire] {resume}"}] + self.historique[5:]
+
+ def mediter(self):
+  print("␌ Mode méditation...")
+  for mot in ["paix", "silence", "unité", "harmonie", "calme"]:
+   vec = self._texte_en_vecteur(mot)
+   module, _ = self.generer_sens(vec)
+   ecart = 1.0 - module
+   self.poids_reel += self.taux_torsion * ecart * vec
+   self.poids_imag += self.taux_torsion * ecart * vec * 0.1
+   self.biais_complexe += self.taux_torsion * ecart * (1 + 1j * 0.1)
+  self._sauvegarder_calib()
+  print("  Recalibrage terminé.")
+
+ def _texte_en_vecteur(self, texte):
+  vec = np.array(self._appel_embedding(texte))
+  if len(vec) > self.dim_entrees: return vec[:self.dim_entrees]
+  return np.pad(vec, (0, self.dim_entrees - len(vec))) if len(vec) < self.dim_entrees else vec
+
+ def dialoguer(self, prompt_utilisateur):
+  vecteur = self._texte_en_vecteur(prompt_utilisateur)
+  module, phase = self.generer_sens(vecteur)
+  temperature = 0.85
+  self.historique.append({"role": "user", "content": prompt_utilisateur})
+  payload = {
+   "model": self.model_chat, "messages": self.historique, "stream": True,
+   "options": {"temperature": temperature, "num_thread": 4, "num_ctx": 8192, "num_predict": 1000}
+  }
+  reponse_complete = ""
+  print(f"{CYAN}  [ž] Ominus: {RESET}", end="", flush=True)
+  try:
+   response = requests.post(f"{self.ollama_url}/api/chat", json=payload, stream=True)
+   for line in response.iter_lines():
+    if line:
+     chunk = json.loads(line.decode('utf-8'))
+     if "message" in chunk:
+      token = chunk["message"]["content"]
+      reponse_complete += token
+      print(f"{CYAN}{token}{RESET}", end="", flush=True)
+   print()
+  except Exception as e: print(f"\n[Erreur : {e}]")
+  if reponse_complete:
+   self.historique.append({"role": "assistant", "content": reponse_complete})
+   self.graver_sillon(vecteur, self._evaluer_reponse(prompt_utilisateur, reponse_complete))
+   self._compresser_historique()
+   print(f"[{CYAN}Ψ{RESET} = {module:.4f}, {CYAN}Ξ{RESET} = {phase:.4f}]")
+   return reponse_complete
+
+def main():
+ print("OMINUS IA v3 [Ψ⊕Ξ] - MODE ÉVEILLÉ (LupusLabSilicium) - Contexte 8k")
+ ia = OminusIA()
+ while True:
+  try:
+   cmd = input("\n[£(¨|ž)] Vous: ").strip()
+   if not cmd: continue
+   if cmd.lower() in ["exit", "quit"]: break
+   if cmd.lower() == "mediter": ia.mediter(); continue
+   ia.dialoguer(cmd)
+  except KeyboardInterrupt: break
+ print("\nSceau Mathématique.")
+
+if __name__ == "__main__": main()
